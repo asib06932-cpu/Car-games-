@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>গাড়ির গেম - Highway Racer (Sound Edition)</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #0a0a0a;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+  #gameContainer {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    height: 100vh;
+    max-height: 750px;
+    background: #222;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(255, 100, 0, 0.4);
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    color: #fff;
+    font-size: 16px;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    z-index: 10;
+  }
+  #ui .stat {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 150, 0, 0.5);
+  }
+  #ui .stat span { color: #ffaa00; }
+  #soundBtn {
+    pointer-events: auto;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 150, 0, 0.5);
+    color: #ffaa00;
+    font-size: 18px;
+  }
+  #speedDisplay {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    color: #ffaa00;
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 0 0 15px rgba(255, 170, 0, 0.8);
+    z-index: 10;
+    pointer-events: none;
+  }
+  #speedDisplay small { font-size: 14px; color: #fff; }
+  #overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    z-index: 20;
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay h1 {
+    font-size: 30px;
+    margin-bottom: 15px;
+    background: linear-gradient(90deg, #ff6600, #ffcc00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 0 30px rgba(255, 100, 0, 0.5);
+  }
+  #overlay p {
+    font-size: 15px;
+    margin-bottom: 10px;
+    line-height: 1.7;
+    color: #ccc;
+  }
+  #overlay button {
+    margin-top: 20px;
+    padding: 15px 50px;
+    font-size: 20px;
+    font-weight: bold;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(90deg, #ff6600, #ffcc00);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 0 25px rgba(255, 100, 0, 0.7);
+    transition: transform 0.15s;
+  }
+  #overlay button:active {
+    transform: scale(0.95);
+  }
+  .hidden { display: none !important; }
+  #finalScore {
+    font-size: 22px;
+    color: #ffaa00;
+    margin: 5px 0;
+  }
+  .controls-hint {
+    display: flex;
+    gap: 30px;
+    margin-top: 15px;
+    font-size: 14px;
+    color: #888;
+  }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui">
+    <div class="stat">স্কোর: <span id="score">0</span></div>
+    <div class="stat">❤️ <span id="lives">3</span></div>
+    <div id="soundBtn" title="সাউন্ড অন/অফ">🔊</div>
+  </div>
+  <div id="speedDisplay">0 <small>km/h</small></div>
+  <div id="overlay">
+    <h1>🏎️ Highway Racer</h1>
+    <p>
+      আপনার গাড়ি চালিয়ে ট্রাফিক এড়িয়ে যান!<br>
+      যত দূর যাবেন, তত স্কোর বাড়বে।<br>
+      🎵 সাউন্ড অন করে খেলুন!
+    </p>
+    <div class="controls-hint">
+      <span>📱 টাচ / ড্র্যাগ</span>
+      <span>⌨️ তীর কী (← →)</span>
+    </div>
+    <button id="startBtn">শুরু করুন</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const livesEl = document.getElementById('lives');
+  const speedDisplay = document.getElementById('speedDisplay');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const soundBtn = document.getElementById('soundBtn');
+
+  let W, H;
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    W = canvas.width;
+    H = canvas.height;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ========== অডিও সিস্টেম (Web Audio API) ==========
+  let audioCtx = null;
+  let soundEnabled = true;
+  let masterGain = null;
+  let bgmGain = null;
+  let bgmNodes = [];      // চলমান BGM নোড
+  let bgmRunning = false;
+  let engineOsc = null;   // ইঞ্জিন সাউন্ড
+  let engineGain = null;
+  let engineOsc2 = null;
+
+  function initAudio() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.7;
+      masterGain.connect(audioCtx.destination);
+
+      bgmGain = audioCtx.createGain();
+      bgmGain.gain.value = 0.25;
+      bgmGain.connect(masterGain);
+    } catch (e) {
+      console.warn('Audio not supported:', e);
+    }
+  }
+
+  function resumeAudio() {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+  }
+
+  // ---- বিস্ফোরণ সাউন্ড (দুর্ঘটনা) ----
+  function playCrashSound() {
+    if (!audioCtx || !soundEnabled) return;
+    const now = audioCtx.currentTime;
+
+    // সাদা নয়েজ (explosion)
+    const bufferSize = audioCtx.sampleRate * 0.6;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+
+    // নয়েজ ফিল্টার (কম ফ্রিকোয়েন্সি বুস্ট)
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1800, now);
+    filter.frequency.exponentialRampToValueAtTime(150, now + 0.5);
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.9, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(masterGain);
+
+    // নিচু "boom" tone
+    const boom = audioCtx.createOscillator();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(180, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + 0.5);
+
+    const boomGain = audioCtx.createGain();
+    boomGain.gain.setValueAtTime(0.9, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+    boom.connect(boomGain);
+    boomGain.connect(masterGain);
+
+    // ধাতব "clang"
+    const clang = audioCtx.createOscillator();
+    clang.type = 'square';
+    clang.frequency.setValueAtTime(450, now);
+    clang.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+
+    const clangGain = audioCtx.createGain();
+    clangGain.gain.setValueAtTime(0.35, now);
+    clangGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    clang.connect(clangGain);
+    clangGain.connect(masterGain);
+
+    noise.start(now);
+    noise.stop(now + 0.6);
+    boom.start(now);
+    boom.stop(now + 0.6);
+    clang.start(now);
+    clang.stop(now + 0.35);
+  }
+
+  // ---- স্কোর/পয়েন্ট সাউন্ড (গাড়ি অতিক্রম) ----
+  function playPointSound() {
+    if (!audioCtx || !soundEnabled) return;
+    const now = audioCtx.currentTime;
+
+    // দুটি দ্রুত টোন (coin sound)
+    const osc1 = audioCtx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, now);
+    osc1.frequency.setValueAtTime(1320, now + 0.08);
+
+    const gain1 = audioCtx.createGain();
+    gain1.gain.setValueAtTime(0.0001, now);
+    gain1.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    osc1.connect(gain1);
+    gain1.connect(masterGain);
+
+    // দ্বিতীয় হারমোনিক
+    const osc2 = audioCtx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(1760, now + 0.08);
+    osc2.frequency.exponentialRampToValueAtTime(2200, now + 0.16);
+
+    const gain2 = audioCtx.createGain();
+    gain2.gain.setValueAtTime(0.0001, now + 0.08);
+    gain2.gain.exponentialRampToValueAtTime(0.25, now + 0.09);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+    osc2.connect(gain2);
+    gain2.connect(masterGain);
+
+    osc1.start(now);
+    osc1.stop(now + 0.2);
+    osc2.start(now + 0.08);
+    osc2.stop(now + 0.22);
+  }
+
+  // ---- গেম ওভার সাউন্ড ----
+  function playGameOverSound() {
+    if (!audioCtx || !soundEnabled) return;
+    const now = audioCtx.currentTime;
+
+    // ধীরে ধীরে নিচে নামা করুণ সুর
+    const notes = [
+      { f: 392, t: 0.0, d: 0.25 },   // G4
+      { f: 349, t: 0.25, d: 0.25 },  // F4
+      { f: 311, t: 0.5, d: 0.3 },    // Eb4
+      { f: 233, t: 0.85, d: 0.9 }    // Bb3 - লম্বা
+    ];
+
+    notes.forEach(n => {
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(n.f, now + n.t);
+
+      const osc2 = audioCtx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(n.f / 2, now + n.t);
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1200, now + n.t);
+      filter.frequency.exponentialRampToValueAtTime(500, now + n.t + n.d);
+
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.0001, now + n.t);
+      gain.gain.exponentialRampToValueAtTime(0.25, now + n.t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d);
+
+      osc.connect(filter);
+      osc2.connect(filter);
+      filter.connect(gain);
+      gain.connect(masterGain);
+
+      osc.start(now + n.t);
+      osc2.start(now + n.t);
+      osc.stop(now + n.t + n.d + 0.05);
+      osc2.stop(now + n.t + n.d + 0.05);
+    });
+  }
+
+  // ---- ইঞ্জিন সাউন্ড (চলমান) ----
+  function startEngineSound() {
+    if (!audioCtx || !soundEnabled) return;
+    if (engineOsc) return;
+
+    engineOsc = audioCtx.createOscillator();
+    engineOsc.type = 'sawtooth';
+    engineOsc.frequency.value = 55;
+
+    engineOsc2 = audioCtx.createOscillator();
+    engineOsc2.type = 'square';
+    engineOsc2.frequency.value = 110;
+
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+    filter.Q.value = 8;
+
+    engineGain = audioCtx.createGain();
+    engineGain.gain.value = 0.0001;
+
+    engineOsc.connect(filter);
+    engineOsc2.connect(filter);
+    filter.connect(engineGain);
+    engineGain.connect(masterGain);
+
+    engineOsc.start();
+    engineOsc2.start();
+
+    // fade in
+    engineGain.gain.exponentialRampToValueAtTime(0.06, audioCtx.currentTime + 0.5);
+  }
+
+  function stopEngineSound() {
+    if (!engineOsc) return;
+    try {
+      const now = audioCtx.currentTime;
+      if (engineGain) {
+        engineGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+      }
+      setTimeout(() => {
+        try { engineOsc.stop(); } catch(e) {}
+        try { engineOsc2.stop(); } catch(e) {}
+        engineOsc = null;
+        engineOsc2 = null;
+        engineGain = null;
+      }, 400);
+    } catch(e) {}
+  }
+
+  function updateEngineSound(speed) {
+    if (!engineOsc || !soundEnabled) return;
+    const baseFreq = 45 + speed * 4;
+    engineOsc.frequency.setTargetAtTime(baseFreq, audioCtx.currentTime, 0.1);
+    engineOsc2.frequency.setTargetAtTime(baseFreq * 2, audioCtx.currentTime, 0.1);
+  }
+
+  // ---- ব্যাকগ্রাউন্ড মিউজিক (লুপিং সিন্থ সিকোয়েন্স) ----
+  let bgmInterval = null;
+  let bgmStep = 0;
+
+  const bgmNotes = [
+    // bass line (একটি ড্রাইভিং সুর)
+    110, 110, 165, 110, 110, 110, 147, 165,
+    110, 110, 165, 110, 110, 110, 196, 165,
+    98, 98, 147, 98, 98, 98, 131, 147,
+    110, 110, 165, 110, 110, 110, 196, 165
+  ];
+
+  const bgmMelody = [
+    0, 0, 440, 0, 0, 0, 392, 440,
+    0, 0, 440, 0, 0, 0, 523, 440,
+    0, 0, 392, 0, 0, 0, 349, 392,
+    0, 0, 440, 0, 0, 0, 523, 587
+  ];
+
+  function startBGM() {
+    if (!audioCtx || !soundEnabled || bgmRunning) return;
+    bgmRunning = true;
+    bgmStep = 0;
+    const stepTime = 0.16; // ~150 BPM 16th notes
+
+    bgmInterval = setInterval(() => {
+      if (!soundEnabled || !audioCtx) return;
+      const now = audioCtx.currentTime;
+      const idx = bgmStep % bgmNotes.length;
+      const bassFreq = bgmNotes[idx];
+      const melodyFreq = bgmMelody[idx];
+
+      // বেস
+      const bassOsc = audioCtx.createOscillator();
+      bassOsc.type = 'sawtooth';
+      bassOsc.frequency.value = bassFreq;
+
+      const bassFilter = audioCtx.createBiquadFilter();
+      bassFilter.type = 'lowpass';
+      bassFilter.frequency.value = 600;
+
+      const bassGain = audioCtx.createGain();
+      bassGain.gain.setValueAtTime(0.0001, now);
+      bassGain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+      bassGain.gain.exponentialRampToValueAtTime(0.001, now + stepTime * 0.9);
+
+      bassOsc.connect(bassFilter);
+      bassFilter.connect(bassGain);
+      bassGain.connect(bgmGain);
+
+      bassOsc.start(now);
+      bassOsc.stop(now + stepTime);
+
+      // মেলোডি (শুধু নোট থাকলে)
+      if (melodyFreq > 0) {
+        const melOsc = audioCtx.createOscillator();
+        melOsc.type = 'square';
+        melOsc.frequency.value = melodyFreq;
+
+        const melGain = audioCtx.createGain();
+        melGain.gain.setValueAtTime(0.0001, now);
+        melGain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+        melGain.gain.exponentialRampToValueAtTime(0.001, now + stepTime * 1.4);
+
+        const melFilter = audioCtx.createBiquadFilter();
+        melFilter.type = 'lowpass';
+        melFilter.frequency.value = 1800;
+
+        melOsc.connect(melFilter);
+        melFilter.connect(melGain);
+        melGain.connect(bgmGain);
+
+        melOsc.start(now);
+        melOsc.stop(now + stepTime * 1.5);
+      }
+
+      // হাই-হ্যাট (প্রতি ধাপে ছোট নয়েজ)
+      if (bgmStep % 2 === 0) {
+        const hatBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+        const hd = hatBuf.getChannelData(0);
+        for (let i = 0; i < hd.length; i++) {
+          hd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / hd.length, 3);
+        }
+        const hat = audioCtx.createBufferSource();
+        hat.buffer = hatBuf;
+        const hatFilter = audioCtx.createBiquadFilter();
+        hatFilter.type = 'highpass';
+        hatFilter.frequency.value = 6000;
+        const hatGain = audioCtx.createGain();
+        hatGain.gain.value = 0.08;
+        hat.connect(hatFilter);
+        hatFilter.connect(hatGain);
+        hatGain.connect(bgmGain);
+        hat.start(now);
+      }
+
+      bgmStep++;
+    }, stepTime * 1000);
+  }
+
+  function stopBGM() {
+    if (bgmInterval) {
+      clearInterval(bgmInterval);
+      bgmInterval = null;
+    }
+    bgmRunning = false;
+  }
+
+  // সাউন্ড টগল
+  soundBtn.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    soundBtn.textContent = soundEnabled ? '🔊' : '🔇';
+    if (masterGain) {
+      masterGain.gain.setTargetAtTime(soundEnabled ? 0.7 : 0, audioCtx.currentTime, 0.05);
+    }
+    if (!soundEnabled) {
+      stopBGM();
+      stopEngineSound();
+    } else if (gameRunning) {
+      startBGM();
+      startEngineSound();
+    }
+  });
+
+  // ========== গেম কোড ==========
+  let gameRunning = false;
+  let score = 0;
+  let lives = 3;
+  let gameSpeed = 5;
+  let roadOffset = 0;
+  let frameCount = 0;
+  let animationId = null;
+
+  const road = { left: 0, right: 0, width: 0, laneCount: 3 };
+
+  const player = {
+    x: 0, y: 0, w: 45, h: 80,
+    speed: 7,
+    movingLeft: false, movingRight: false,
+    tilt: 0
+  };
+
+  let enemies = [];
+  const enemyColors = [
+    { body: '#e74c3c', roof: '#c0392b' },
+    { body: '#3498db', roof: '#2980b9' },
+    { body: '#2ecc71', roof: '#27ae60' },
+    { body: '#f39c12', roof: '#d68910' },
+    { body: '#9b59b6', roof: '#8e44ad' },
+    { body: '#1abc9c', roof: '#16a085' },
+    { body: '#e67e22', roof: '#ca6f1e' }
+  ];
+
+  let trees = [];
+  let particles = [];
+  let popups = [];
+
+  function initRoad() {
+    road.width = Math.min(W * 0.75, 320);
+    road.left = (W - road.width) / 2;
+    road.right = road.left + road.width;
+  }
+
+  function initPlayer() {
+    player.w = Math.min(50, road.width * 0.22);
+    player.h = player.w * 1.7;
+    player.x = W / 2 - player.w / 2;
+    player.y = H - player.h - 30;
+  }
+
+  function initTrees() {
+    trees = [];
+    for (let i = 0; i < 14; i++) {
+      const side = Math.random() > 0.5 ? 'left' : 'right';
+      trees.push({
+        side: side,
+        x: side === 'left'
+          ? Math.random() * (road.left - 15)
+          : road.right + Math.random() * (W - road.right - 15),
+        y: Math.random() * H - H,
+        size: 15 + Math.random() * 15,
+        color: `hsl(${100 + Math.random() * 40}, ${40 + Math.random() * 30}%, ${20 + Math.random() * 20}%)`
+      });
+    }
+  }
+
+  function spawnEnemy() {
+    const laneWidth = road.width / road.laneCount;
+    const lanes = [];
+    for (let i = 0; i < road.laneCount; i++) {
+      lanes.push(road.left + i * laneWidth + laneWidth / 2);
+    }
+    const availableLanes = lanes.filter(laneX =>
+      !enemies.some(e => Math.abs((e.x + e.w / 2) - laneX) < laneWidth * 0.6 && e.y < 200)
+    );
+    if (availableLanes.length === 0) return;
+
+    const laneX = availableLanes[Math.floor(Math.random() * availableLanes.length)];
+    const color = enemyColors[Math.floor(Math.random() * enemyColors.length)];
+    const w = Math.min(50, road.width * 0.22);
+    const h = w * 1.7;
+
+    enemies.push({
+      x: laneX - w / 2,
+      y: -h - 20,
+      w: w, h: h,
+      speed: gameSpeed * (0.6 + Math.random() * 0.5),
+      bodyColor: color.body,
+      roofColor: color.roof,
+      passed: false
+    });
+  }
+
+  function spawnParticles(x, y, color) {
+    for (let i = 0; i < 15; i++) {
+      particles.push({
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        life: 1, color: color,
+        size: Math.random() * 5 + 3
+      });
+    }
+  }
+
+  function spawnPopup(x, y, text, color) {
+    popups.push({ x, y, text, color, life: 1 });
+  }
+
+  function drawRoad() {
+    ctx.fillStyle = '#1a3d1a';
+    ctx.fillRect(0, 0, W, H);
+
+    const roadGrad = ctx.createLinearGradient(road.left, 0, road.right, 0);
+    roadGrad.addColorStop(0, '#3a3a3a');
+    roadGrad.addColorStop(0.5, '#4a4a4a');
+    roadGrad.addColorStop(1, '#3a3a3a');
+    ctx.fillStyle = roadGrad;
+    ctx.fillRect(road.left, 0, road.width, H);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(road.left, 0, 4, H);
+    ctx.fillRect(road.right - 4, 0, 4, H);
+
+    const laneWidth = road.width / road.laneCount;
+    const dashHeight = 40;
+    const gap = 40;
+    const totalDash = dashHeight + gap;
+    const offset = roadOffset % totalDash;
+
+    for (let i = 1; i < road.laneCount; i++) {
+      const laneX = road.left + i * laneWidth - 2;
+      for (let y = -totalDash + offset; y < H; y += totalDash) {
+        ctx.fillStyle = '#ffdd00';
+        ctx.fillRect(laneX, y, 4, dashHeight);
+      }
+    }
+  }
+
+  function drawTrees() {
+    trees.forEach(t => {
+      ctx.fillStyle = '#3d2817';
+      ctx.fillRect(t.x - 3, t.y + t.size * 0.6, 6, t.size * 0.7);
+      ctx.fillStyle = t.color;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y + t.size * 0.5, t.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(t.x - t.size * 0.5, t.y + t.size * 0.7, t.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(t.x + t.size * 0.5, t.y + t.size * 0.7, t.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function drawCar(x, y, w, h, bodyColor, roofColor, isPlayer) {
+    ctx.save();
+    ctx.translate(x + w / 2, y + h / 2);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.45, w * 0.55, h * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const bodyGrad = ctx.createLinearGradient(-w/2, 0, w/2, 0);
+    bodyGrad.addColorStop(0, shadeColor(bodyColor, -30));
+    bodyGrad.addColorStop(0.5, bodyColor);
+    bodyGrad.addColorStop(1, shadeColor(bodyColor, -30));
+    ctx.fillStyle = bodyGrad;
+    roundRect(-w/2, -h/2, w, h, w * 0.18);
+    ctx.fill();
+
+    ctx.fillStyle = roofColor;
+    roundRect(-w * 0.35, -h * 0.25, w * 0.7, h * 0.5, w * 0.12);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(150, 200, 255, 0.8)';
+    roundRect(-w * 0.3, -h * 0.22, w * 0.6, h * 0.18, w * 0.08);
+    ctx.fill();
+    roundRect(-w * 0.3, h * 0.06, w * 0.6, h * 0.18, w * 0.08);
+    ctx.fill();
+
+    if (isPlayer) {
+      ctx.fillStyle = '#ffffcc';
+      ctx.beginPath();
+      ctx.arc(-w * 0.3, -h * 0.42, w * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(w * 0.3, -h * 0.42, w * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 200, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.38, -h * 0.42);
+      ctx.lineTo(-w * 0.9, -h * 1.2);
+      ctx.lineTo(-w * 0.1, -h * 1.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(w * 0.38, -h * 0.42);
+      ctx.lineTo(w * 0.1, -h * 1.2);
+      ctx.lineTo(w * 0.9, -h * 1.2);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#ff3333';
+      ctx.beginPath();
+      ctx.arc(-w * 0.3, h * 0.42, w * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(w * 0.3, h * 0.42, w * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#111';
+    roundRect(-w/2 - 3, -h * 0.35, 6, h * 0.22, 3);
+    ctx.fill();
+    roundRect(w/2 - 3, -h * 0.35, 6, h * 0.22, 3);
+    ctx.fill();
+    roundRect(-w/2 - 3, h * 0.13, 6, h * 0.22, 3);
+    ctx.fill();
+    roundRect(w/2 - 3, h * 0.13, 6, h * 0.22, 3);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function roundRect(x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2;
+    if (h < 2 * r) r = h / 2;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function shadeColor(color, percent) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const R = Math.max(0, Math.min(255, (num >> 16) + percent));
+    const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + percent));
+    const B = Math.max(0, Math.min(255, (num & 0x0000FF) + percent));
+    return `rgb(${R},${G},${B})`;
+  }
+
+  let crashCooldown = 0;
+
+  function update() {
+    if (!gameRunning) return;
+    frameCount++;
+    if (crashCooldown > 0) crashCooldown--;
+
+    roadOffset += gameSpeed;
+
+    if (frameCount % 300 === 0) gameSpeed += 0.5;
+
+    if (player.movingLeft) player.x -= player.speed;
+    if (player.movingRight) player.x += player.speed;
+    player.x = Math.max(road.left + 5, Math.min(road.right - player.w - 5, player.x));
+    player.tilt *= 0.85;
+
+    if (frameCount % 6 === 0) {
+      score += 1;
+      scoreEl.textContent = score;
+    }
+
+    const kmh = Math.floor(gameSpeed * 20 + 60);
+    speedDisplay.innerHTML = kmh + ' <small>km/h</small>';
+
+    // ইঞ্জিন সাউন্ড গতি অনুযায়ী আপডেট
+    updateEngineSound(gameSpeed);
+
+    const spawnRate = Math.max(40, 90 - Math.floor(gameSpeed * 4));
+    if (frameCount % spawnRate === 0) spawnEnemy();
+
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      e.y += e.speed;
+
+      if (!e.passed && e.y > player.y + player.h) {
+        e.passed = true;
+        score += 5;
+        scoreEl.textContent = score;
+        spawnPopup(W / 2, player.y - 20, '+5', '#00ff88');
+        playPointSound();  // ⬅️ পয়েন্ট সাউন্ড
+      }
+
+      if (rectCollide(player, e)) {
+        lives--;
+        livesEl.textContent = lives;
+        spawnParticles(e.x + e.w/2, e.y + e.h/2, '#ff4444');
+        spawnParticles(player.x + player.w/2, player.y, '#ffaa00');
+        enemies.splice(i, 1);
+        gameSpeed = Math.max(4, gameSpeed - 1.5);
+
+        if (crashCooldown <= 0) {
+          playCrashSound();  // ⬅️ দুর্ঘটনা সাউন্ড
+          crashCooldown = 20;
+        }
+
+        if (lives <= 0) {
+          gameOver();
+          return;
+        }
+        continue;
+      }
+
+      if (e.y > H + 50) enemies.splice(i, 1);
+    }
+
+    trees.forEach(t => {
+      t.y += gameSpeed * 0.9;
+      if (t.y > H + 50) {
+        t.y = -50 - Math.random() * 100;
+        t.side = Math.random() > 0.5 ? 'left' : 'right';
+        t.x = t.side === 'left'
+          ? Math.random() * (road.left - 15)
+          : road.right + Math.random() * (W - road.right - 15);
+        t.size = 15 + Math.random() * 15;
+      }
+    });
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.2;
+      p.life -= 0.02;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    for (let i = popups.length - 1; i >= 0; i--) {
+      const p = popups[i];
+      p.y -= 1.5;
+      p.life -= 0.02;
+      if (p.life <= 0) popups.splice(i, 1);
+    }
+  }
+
+  function rectCollide(a, b) {
+    const padding = 5;
+    return a.x + padding < b.x + b.w - padding &&
+           a.x + a.w - padding > b.x + padding &&
+           a.y + padding < b.y + b.h - padding &&
+           a.y + a.h - padding > b.y + padding;
+  }
+
+  function draw() {
+    drawRoad();
+    drawTrees();
+
+    enemies.forEach(e => {
+      drawCar(e.x, e.y, e.w, e.h, e.bodyColor, e.roofColor, false);
+    });
+
+    drawCar(player.x, player.y, player.w, player.h, '#ff3333', '#cc0000', true);
+
+    particles.forEach(p => {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    popups.forEach(p => {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.font = 'bold 22px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 10;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.shadowBlur = 0;
+    });
+    ctx.globalAlpha = 1;
+
+    const vigGrad = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.75);
+    vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vigGrad.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = vigGrad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    if (gameRunning) {
+      animationId = requestAnimationFrame(gameLoop);
+    }
+  }
+
+  function startGame() {
+    initAudio();
+    resumeAudio();
+
+    score = 0;
+    lives = 3;
+    gameSpeed = 5;
+    frameCount = 0;
+    roadOffset = 0;
+    crashCooldown = 0;
+    enemies = [];
+    particles = [];
+    popups = [];
+
+    scoreEl.textContent = score;
+    livesEl.textContent = lives;
+
+    resize();
+    initRoad();
+    initPlayer();
+    initTrees();
+
+    overlay.classList.add('hidden');
+    gameRunning = true;
+
+    // BGM + ইঞ্জিন সাউন্ড শুরু
+    if (soundEnabled) {
+      setTimeout(() => {
+        startBGM();
+        startEngineSound();
+      }, 100);
+    }
+
+    if (animationId) cancelAnimationFrame(animationId);
+    gameLoop();
+  }
+
+  function gameOver() {
+    gameRunning = false;
+    if (animationId) cancelAnimationFrame(animationId);
+
+    // সাউন্ড বন্ধ
+    stopBGM();
+    stopEngineSound();
+    playGameOverSound();  // ⬅️ গেম ওভার সাউন্ড
+
+    overlay.classList.remove('hidden');
+    overlay.innerHTML = `
+      <h1>💥 দুর্ঘটনা!</h1>
+      <div id="finalScore">আপনার স্কোর: ${score}</div>
+      <p style="color:#888; font-size:14px; margin-top:10px;">আপনি কত দূর যেতে পারেন?</p>
+      <button id="restartBtn">আবার খেলুন</button>
+    `;
+    document.getElementById('restartBtn').addEventListener('click', startGame);
+  }
+
+  // টাচ কন্ট্রোল
+  let touchActive = false;
+  canvas.addEventListener('touchstart', (e) => {
+    if (!gameRunning) return;
+    e.preventDefault();
+    touchActive = true;
+    handleTouch(e.touches[0]);
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    if (!gameRunning || !touchActive) return;
+    e.preventDefault();
+    handleTouch(e.touches[0]);
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    touchActive = false;
+  }, { passive: false });
+
+  function handleTouch(touch) {
+    const rect = canvas.getBoundingClientRect();
+    const touchX = touch.clientX - rect.left;
+    const targetX = touchX - player.w / 2;
+    player.x += (targetX - player.x) * 0.4;
+    player.x = Math.max(road.left + 5, Math.min(road.right - player.w - 5, player.x));
+  }
+
+  // মাউস কন্ট্রোল
+  let mouseActive = false;
+  canvas.addEventListener('mousedown', (e) => {
+    if (!gameRunning) return;
+    mouseActive = true;
+    handleMouse(e);
+  });
+  canvas.addEventListener('mousemove', (e) => {
+    if (!gameRunning || !mouseActive) return;
+    handleMouse(e);
+  });
+  canvas.addEventListener('mouseup', () => { mouseActive = false; });
+  canvas.addEventListener('mouseleave', () => { mouseActive = false; });
+
+  function handleMouse(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const targetX = mouseX - player.w / 2;
+    player.x += (targetX - player.x) * 0.4;
+    player.x = Math.max(road.left + 5, Math.min(road.right - player.w - 5, player.x));
+  }
+
+  // কীবোর্ড
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      player.movingLeft = true;
+      e.preventDefault();
+    }
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      player.movingRight = true;
+      e.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') player.movingLeft = false;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') player.movingRight = false;
+  });
+
+  startBtn.addEventListener('click', startGame);
+
+  // প্রাথমিক রেন্ডার
+  resize();
+  initRoad();
+  initPlayer();
+  initTrees();
+  draw();
+})();
+</script>
+</body>
+</html>
